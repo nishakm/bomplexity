@@ -30,7 +30,7 @@ standard library's `http.ServeMux`.
 
 `cyclonedx-gomod` installs into `$(go env GOPATH)/bin`; the Makefile finds it
 there even if that directory is not on your `PATH`. Its `app` mode needs this
-folder to be a git repository (it derives the main module's version from git).
+folder to be inside a git repository (it derives the main module's version from git).
 
 ## Make targets
 
