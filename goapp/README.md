@@ -60,7 +60,6 @@ curl localhost:18080/sbom
 |-----------------|-----------------------------------------------------------------------|
 | `build`         | `go build` into `./bin/`                                              |
 | `sbom`          | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app |
-| `sbom-embedded` | prints `go version -m ./bin/guestbook`                                |
 | `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)               |
 | `test`          | `go test ./...`                                                       |
 | `clean`         | removes `bin/` and `sbom/`                                            |
@@ -89,6 +88,3 @@ Things to know:
   module. (In reality `puddle` and `x/text` each pull in `x/sync`.)
 - **No main module version.** Build info reports `(devel)` for the main module,
   so its purl has no `@version`.
-- **Same data as `go version -m`.** `make sbom-embedded` prints the raw module
-  list (with `h1:` checksums and build settings) that Go stamped into the
-  binary; `/sbom` is a reformatting of it.

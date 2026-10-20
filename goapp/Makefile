@@ -3,7 +3,7 @@ SBOM_DIR     := sbom
 RUNTIME_SBOM := $(SBOM_DIR)/runtime.txt
 PORT         ?= 18080
 
-.PHONY: build sbom sbom-embedded run test clean
+.PHONY: build sbom run test clean
 
 ## build: compile to ./bin
 build:
@@ -24,10 +24,6 @@ sbom: $(BIN)
 	  sleep 0.1; \
 	done; \
 	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
-
-## sbom-embedded: module list Go embedded in the binary
-sbom-embedded: $(BIN)
-	go version -m $(BIN)
 
 ## run: run the app (in-memory store unless DATABASE_URL is set)
 run:
