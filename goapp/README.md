@@ -71,7 +71,7 @@ prints an ASCII tree of package URLs (purls): the main module, each dependency
 module with its version, and the Go toolchain (`pkg:golang/std@<version>`):
 
 ```
-pkg:golang/github.com/nisha/guestbook
+pkg:golang/github.com/nishakm/guestbook
 +-- pkg:golang/github.com/jackc/pgpassfile@v1.0.0
 +-- pkg:golang/github.com/jackc/pgservicefile@v0.0.0-20240606120523-5a60cdf6a761
 +-- pkg:golang/github.com/jackc/pgx/v5@v5.11.0
