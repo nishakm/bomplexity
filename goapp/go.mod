@@ -1,4 +1,4 @@
-module github.com/nishakm/guestbook
+module github.com/nisha/guestbook
 
 go 1.25.0
 
