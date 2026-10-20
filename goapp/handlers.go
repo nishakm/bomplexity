@@ -65,8 +65,8 @@ func newMux(store Store) *http.ServeMux {
 			writeError(w, http.StatusInternalServerError, "build info unavailable (binary not built with module support)")
 			return
 		}
-		w.Header().Set("Content-Type", "application/vnd.cyclonedx+json")
-		_ = json.NewEncoder(w).Encode(buildSBOM(bi))
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(renderSBOM(bi)))
 	})
 	return mux
 }

@@ -7,7 +7,7 @@ CDXGOMOD   ?= $(or $(shell command -v cyclonedx-gomod),$(shell go env GOPATH)/bi
 
 SRC_SBOM     := $(SBOM_DIR)/source.cdx.json
 BIN_SBOM     := $(SBOM_DIR)/binary.cdx.json
-RUNTIME_SBOM := $(SBOM_DIR)/runtime.cdx.json
+RUNTIME_SBOM := $(SBOM_DIR)/runtime.txt
 
 .PHONY: build sbom-embedded sbom-runtime sbom-diff run test clean
 
@@ -38,14 +38,15 @@ sbom-runtime: $(BIN)
 	done; \
 	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
 
-## sbom-diff: draw source, binary and runtime SBOMs as ASCII trees
+## sbom-diff: draw source and binary SBOMs as ASCII trees, then show the runtime one
 sbom-diff:
 	@for f in $(SRC_SBOM) $(BIN_SBOM) $(RUNTIME_SBOM); do \
 	  [ -f $$f ] || { echo "missing $$f: run 'make build sbom-runtime' first" >&2; exit 1; }; \
 	done
-	@jq -n -r -f sbom-diff.jq \
-	  --slurpfile src $(SRC_SBOM) --slurpfile bin $(BIN_SBOM) --slurpfile rt $(RUNTIME_SBOM) \
-	  --arg srcfile $(SRC_SBOM) --arg binfile $(BIN_SBOM) --arg rtfile $(RUNTIME_SBOM)
+	@jq -n -r -f sbom-diff.jq --slurpfile src $(SRC_SBOM) --slurpfile bin $(BIN_SBOM) \
+	  --arg srcfile $(SRC_SBOM) --arg binfile $(BIN_SBOM)
+	@echo "=== RUNTIME ($(RUNTIME_SBOM))"; echo "    made by: GET /sbom, the app reads its own build info"; echo
+	@cat $(RUNTIME_SBOM)
 
 ## run: run the app (in-memory store unless DATABASE_URL is set)
 run:

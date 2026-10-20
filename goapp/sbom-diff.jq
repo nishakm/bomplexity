@@ -1,7 +1,6 @@
-# Draw the three SBOMs as ASCII trees so their shapes can be compared.
+# Draw the source and binary SBOMs as ASCII trees so their shapes can be compared.
 #   $src: cyclonedx-gomod app  (from source)
 #   $bin: cyclonedx-gomod bin  (from the built binary)
-#   $rt:  GET /sbom            (runtime/debug.ReadBuildInfo)
 
 def nodename($idx; $ref):
   ($idx[$ref] // null) | if . then "\(.name)@\(.version)" else $ref end;
@@ -56,10 +55,6 @@ section("SOURCE  (\($srcfile))"; "cyclonedx-gomod app, reads go.mod and the pack
         "Real dependency graph: shows which module pulls in which (note x/sync under three parents)."),
 section("BINARY  (\($binfile))"; "cyclonedx-gomod bin, reads the build info embedded in bin/guestbook"; $bin[0];
         "Build info lists modules but not who imports whom, so every module hangs directly off main."),
-section("RUNTIME (\($rtfile))"; "GET /sbom, the app reads its own build info with debug.ReadBuildInfo()"; $rt[0];
-        "No dependency section at all: a flat list, plus the Go toolchain as an extra component."),
 "=== Module differences",
-"    only in runtime vs source: \((names($rt[0]) - names($src[0])) | list)",
-"    only in source vs runtime: \((names($src[0]) - names($rt[0])) | list)",
 "    only in binary vs source:  \((names($bin[0]) - names($src[0])) | list)",
 "    only in source vs binary:  \((names($src[0]) - names($bin[0])) | list)"

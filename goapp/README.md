@@ -10,7 +10,7 @@ Software Bill of Materials (SBOM) using only Go's own tooling.
 | POST   | `/entries` | Add an entry: `{"name": "...", "message": "..."}`          |
 | GET    | `/entries` | List entries                                               |
 | GET    | `/healthz` | Returns 200                                                |
-| GET    | `/sbom`    | The app's own CycloneDX SBOM, built at runtime             |
+| GET    | `/sbom`    | The app's own SBOM as a plain-text tree of package URLs    |
 
 Storage is Postgres (via `pgx`) when `DATABASE_URL` is set, otherwise an
 in-memory store. `PORT` sets the listen port (default `8080`).
@@ -56,7 +56,7 @@ Try it (use the port you started on; `make run` uses 18080):
 curl -XPOST localhost:18080/entries -d '{"name":"ann","message":"hi"}'
 curl localhost:18080/entries
 curl localhost:18080/healthz
-curl localhost:18080/sbom | jq .
+curl localhost:18080/sbom
 ```
 
 ## Make targets
@@ -65,8 +65,8 @@ curl localhost:18080/sbom | jq .
 |-----------------|-------------------------------------------------------------------------------|
 | `build`         | `go build` into `./bin/`, then writes both CycloneDX SBOMs into `./sbom/`     |
 | `sbom-embedded` | prints `go version -m ./bin/guestbook`                                        |
-| `sbom-runtime`  | starts the app, fetches `/sbom` into `sbom/runtime.cdx.json`, stops the app   |
-| `sbom-diff`     | draws the source, binary and runtime SBOMs as ASCII trees                     |
+| `sbom-runtime`  | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app        |
+| `sbom-diff`     | draws the source and binary SBOMs as ASCII trees, then prints the runtime one |
 | `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)                       |
 | `test`          | `go test ./...`                                                               |
 | `clean`         | removes `bin/` and `sbom/`                                                    |
@@ -84,11 +84,19 @@ curl localhost:18080/sbom | jq .
 3. **Source, `sbom/source.cdx.json`**, from `cyclonedx-gomod app`. It loads the
    module with the Go toolchain, evaluates build constraints, and records the
    `dependencies` graph: which module requires which.
-4. **Runtime, `sbom/runtime.cdx.json`**, from `GET /sbom`. The app calls
-   `runtime/debug.ReadBuildInfo()` on itself and emits CycloneDX: main module,
-   each dependency with version and SHA-256 (the `h1:` go.sum value decoded to
-   hex, original kept in a `go:sum` property), and the Go toolchain as a
-   `platform` component.
+4. **Runtime, `sbom/runtime.txt`**, from `GET /sbom`. The app calls
+   `runtime/debug.ReadBuildInfo()` on itself and prints an ASCII tree of
+   package URLs (purls): the main module, each dependency module with its
+   version, and the Go toolchain (`pkg:golang/std@<version>`). It is plain
+   text, not CycloneDX, and carries no checksums. Like the binary SBOM, it has
+   no import graph, so everything hangs directly off the main module:
+
+   ```
+   pkg:golang/github.com/nisha/guestbook
+   +-- pkg:golang/github.com/jackc/pgx/v5@v5.11.0
+   +-- ...
+   `-- pkg:golang/std@1.26.10
+   ```
 
 ### Why they differ
 
@@ -96,8 +104,8 @@ curl localhost:18080/sbom | jq .
   binary* but not *who pulled them in*. Only the source-based SBOM can see
   `go.mod` and the package import graph, so only it shows e.g. `puddle` and
   `x/text` each pulling in `x/sync`. The binary SBOM flattens everything under
-  the main module, and the runtime SBOM has no `dependencies` section at all.
-  `make sbom-diff` draws all three as ASCII trees so you can see this.
+  the main module, and the runtime output is the same flat shape (plain text, so it has no
+  `dependencies` section at all). `make sbom-diff` draws them so you can see this.
 - **Toolchain.** The runtime SBOM lists the Go toolchain as a component;
   `cyclonedx-gomod` only adds the standard library when passed `-std`.
 - **Version of the main module.** Build info and the tools derive it from VCS

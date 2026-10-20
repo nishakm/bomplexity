@@ -70,34 +70,37 @@ func TestPostValidation(t *testing.T) {
 	}
 }
 
-func TestBuildSBOM(t *testing.T) {
+func TestRenderSBOM(t *testing.T) {
 	bi := &debug.BuildInfo{
 		GoVersion: "go1.25.1",
 		Main:      debug.Module{Path: "example.com/app", Version: "(devel)"},
 		Deps: []*debug.Module{
-			{Path: "github.com/jackc/pgx/v5", Version: "v5.7.0", Sum: "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="},
-			{Path: "golang.org/x/text", Version: "v0.20.0", Sum: "bogus"},
+			{Path: "github.com/jackc/pgx/v5", Version: "v5.7.0"},
+			{Path: "golang.org/x/text", Version: "v0.20.0"},
 		},
 	}
-	b := buildSBOM(bi)
-	if b.BOMFormat != "CycloneDX" || b.SpecVersion != "1.6" || !strings.HasPrefix(b.SerialNumber, "urn:uuid:") {
-		t.Fatalf("bad header %+v", b)
+	want := "pkg:golang/example.com/app\n" +
+		"+-- pkg:golang/github.com/jackc/pgx/v5@v5.7.0\n" +
+		"+-- pkg:golang/golang.org/x/text@v0.20.0\n" +
+		"`-- pkg:golang/std@1.25.1\n"
+	if got := renderSBOM(bi); got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
-	if b.Metadata.Component.Name != "example.com/app" {
-		t.Errorf("main component = %q", b.Metadata.Component.Name)
+}
+
+func TestRenderSBOMReplace(t *testing.T) {
+	bi := &debug.BuildInfo{
+		GoVersion: "go1.25.1",
+		Main:      debug.Module{Path: "example.com/app", Version: "v1.2.3"},
+		Deps: []*debug.Module{{
+			Path: "example.com/lib", Version: "v1.0.0",
+			Replace: &debug.Module{Path: "example.com/fork", Version: "v1.0.1"},
+		}},
 	}
-	if len(b.Components) != 3 {
-		t.Fatalf("want 2 deps + toolchain, got %d", len(b.Components))
-	}
-	pgx := b.Components[0]
-	if pgx.PURL != "pkg:golang/github.com/jackc/pgx/v5@v5.7.0" || len(pgx.Hashes) != 1 || len(pgx.Hashes[0].Content) != 64 {
-		t.Errorf("bad pgx component %+v", pgx)
-	}
-	if len(b.Components[1].Hashes) != 0 {
-		t.Errorf("bogus sum should yield no hash")
-	}
-	if tc := b.Components[2]; tc.Name != "go" || tc.Version != "1.25.1" {
-		t.Errorf("bad toolchain %+v", tc)
+	got := renderSBOM(bi)
+	if !strings.HasPrefix(got, "pkg:golang/example.com/app@v1.2.3\n") ||
+		!strings.Contains(got, "+-- pkg:golang/example.com/lib@v1.0.1\n") {
+		t.Fatalf("unexpected output:\n%s", got)
 	}
 }
 
@@ -106,8 +109,11 @@ func TestSBOMEndpoint(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("got %d: %s", rec.Code, rec.Body)
 	}
-	var b bom
-	if err := json.Unmarshal(rec.Body.Bytes(), &b); err != nil || b.BOMFormat != "CycloneDX" {
-		t.Fatalf("invalid sbom: %v", err)
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("content type = %q", ct)
+	}
+	body := rec.Body.String()
+	if !strings.HasPrefix(body, "pkg:golang/") || !strings.Contains(body, "pkg:golang/std@") {
+		t.Fatalf("unexpected body:\n%s", body)
 	}
 }
