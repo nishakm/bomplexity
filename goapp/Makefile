@@ -38,13 +38,14 @@ sbom-runtime: $(BIN)
 	done; \
 	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
 
-## sbom-diff: compare the runtime SBOM (flat) with the source SBOM (graph)
+## sbom-diff: draw source, binary and runtime SBOMs as ASCII trees
 sbom-diff:
-	@for f in $(RUNTIME_SBOM) $(SRC_SBOM); do \
+	@for f in $(SRC_SBOM) $(BIN_SBOM) $(RUNTIME_SBOM); do \
 	  [ -f $$f ] || { echo "missing $$f: run 'make build sbom-runtime' first" >&2; exit 1; }; \
 	done
-	@jq -n -r -f sbom-diff.jq --slurpfile rt $(RUNTIME_SBOM) --slurpfile src $(SRC_SBOM) \
-	  --arg rtfile $(RUNTIME_SBOM) --arg srcfile $(SRC_SBOM)
+	@jq -n -r -f sbom-diff.jq \
+	  --slurpfile src $(SRC_SBOM) --slurpfile bin $(BIN_SBOM) --slurpfile rt $(RUNTIME_SBOM) \
+	  --arg srcfile $(SRC_SBOM) --arg binfile $(BIN_SBOM) --arg rtfile $(RUNTIME_SBOM)
 
 ## run: run the app (in-memory store unless DATABASE_URL is set)
 run:

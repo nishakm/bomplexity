@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+	// ctrl+c stops the app
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -51,6 +52,7 @@ func openStore(ctx context.Context) (Store, error) {
 	return NewMemoryStore(), nil
 }
 
+// envOr get environment variable or string
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

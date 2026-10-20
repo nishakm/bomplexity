@@ -32,6 +32,33 @@ standard library's `http.ServeMux`.
 there even if that directory is not on your `PATH`. Its `app` mode needs this
 folder to be inside a git repository (it derives the main module's version from git).
 
+## Build and run
+
+From this folder:
+
+```
+make build                # compile to bin/guestbook and write the SBOMs to sbom/
+make run                  # go run, in-memory store, port 18080
+PORT=8080 make run        # pick a different port
+./bin/guestbook           # run the built binary (port 8080 unless PORT is set)
+```
+
+To use Postgres instead of the in-memory store (the `entries` table is created
+on startup):
+
+```
+DATABASE_URL=postgres://user:pass@localhost:5432/dbname ./bin/guestbook
+```
+
+Try it (use the port you started on; `make run` uses 18080):
+
+```
+curl -XPOST localhost:18080/entries -d '{"name":"ann","message":"hi"}'
+curl localhost:18080/entries
+curl localhost:18080/healthz
+curl localhost:18080/sbom | jq .
+```
+
 ## Make targets
 
 | Target          | What it does                                                                  |
@@ -39,7 +66,7 @@ folder to be inside a git repository (it derives the main module's version from 
 | `build`         | `go build` into `./bin/`, then writes both CycloneDX SBOMs into `./sbom/`     |
 | `sbom-embedded` | prints `go version -m ./bin/guestbook`                                        |
 | `sbom-runtime`  | starts the app, fetches `/sbom` into `sbom/runtime.cdx.json`, stops the app   |
-| `sbom-diff`     | summarises runtime vs source SBOM (counts, dependency graph present or not)   |
+| `sbom-diff`     | draws the source, binary and runtime SBOMs as ASCII trees                     |
 | `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)                       |
 | `test`          | `go test ./...`                                                               |
 | `clean`         | removes `bin/` and `sbom/`                                                    |
@@ -51,8 +78,9 @@ folder to be inside a git repository (it derives the main module's version from 
    `h1:` checksums, plus VCS and build settings). It is the source of truth the
    next two are derived from.
 2. **Binary, `sbom/binary.cdx.json`**, from `cyclonedx-gomod bin`. It reads the
-   same embedded build info and reformats it as CycloneDX. Flat component
-   list, no relationships.
+   same embedded build info and reformats it as CycloneDX. Because build info
+   has no import graph, every module is recorded as a direct dependency of the
+   main module (a star, not a tree).
 3. **Source, `sbom/source.cdx.json`**, from `cyclonedx-gomod app`. It loads the
    module with the Go toolchain, evaluates build constraints, and records the
    `dependencies` graph: which module requires which.
@@ -64,10 +92,12 @@ folder to be inside a git repository (it derives the main module's version from 
 
 ### Why they differ
 
-- **Graph vs. flat list.** Build info records *which modules are in the binary*
-  but not *who pulled them in*. The binary and runtime SBOMs therefore have no
-  `dependencies` section. Only the source-based SBOM can see `go.mod` and the
-  package import graph.
+- **Graph vs. star vs. nothing.** Build info records *which modules are in the
+  binary* but not *who pulled them in*. Only the source-based SBOM can see
+  `go.mod` and the package import graph, so only it shows e.g. `puddle` and
+  `x/text` each pulling in `x/sync`. The binary SBOM flattens everything under
+  the main module, and the runtime SBOM has no `dependencies` section at all.
+  `make sbom-diff` draws all three as ASCII trees so you can see this.
 - **Toolchain.** The runtime SBOM lists the Go toolchain as a component;
   `cyclonedx-gomod` only adds the standard library when passed `-std`.
 - **Version of the main module.** Build info and the tools derive it from VCS
