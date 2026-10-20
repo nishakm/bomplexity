@@ -1,18 +1,29 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"runtime/debug"
 	"strings"
 )
 
-// renderSBOM turns Go build info into an ASCII tree of package URLs: the main
-// module at the root, then every dependency module and the Go toolchain.
+// renderSBOM reads the running binary's build info and returns it as an ASCII
+// tree of package URLs.
+func renderSBOM() (string, error) {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("build info unavailable (binary not built with module support)")
+	}
+	return formatSBOM(bi), nil
+}
+
+// formatSBOM draws build info as a tree: the main module at the root, then
+// every dependency module and the Go toolchain.
 //
 // Build info records which modules are in the binary but not which module
 // imports which, so every entry hangs directly off the main module.
-func renderSBOM(bi *debug.BuildInfo) string {
+func formatSBOM(bi *debug.BuildInfo) string {
 	var b strings.Builder
 	mainVersion := bi.Main.Version
 	if mainVersion == "(devel)" {

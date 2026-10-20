@@ -1,33 +1,20 @@
-BIN        := bin/guestbook
-SBOM_DIR   := sbom
-PORT       ?= 18080
-
-# cyclonedx-gomod: prefer PATH, fall back to the default `go install` location.
-CDXGOMOD   ?= $(or $(shell command -v cyclonedx-gomod),$(shell go env GOPATH)/bin/cyclonedx-gomod)
-
-SRC_SBOM     := $(SBOM_DIR)/source.cdx.json
-BIN_SBOM     := $(SBOM_DIR)/binary.cdx.json
+BIN          := bin/guestbook
+SBOM_DIR     := sbom
 RUNTIME_SBOM := $(SBOM_DIR)/runtime.txt
+PORT         ?= 18080
 
-.PHONY: build sbom-embedded sbom-runtime sbom-diff run test clean
+.PHONY: build sbom sbom-embedded run test clean
 
-## build: compile to ./bin and generate both CycloneDX SBOMs into ./sbom
+## build: compile to ./bin
 build:
-	@mkdir -p bin $(SBOM_DIR)
+	@mkdir -p bin
 	go build -trimpath -o $(BIN) .
-	$(CDXGOMOD) bin -json -output $(BIN_SBOM) $(BIN)
-	$(CDXGOMOD) app -json -output $(SRC_SBOM) -main . .
-	@echo "SBOMs written: $(BIN_SBOM) $(SRC_SBOM)"
-
-## sbom-embedded: module list Go embedded in the binary
-sbom-embedded: $(BIN)
-	go version -m $(BIN)
 
 $(BIN):
 	$(MAKE) build
 
-## sbom-runtime: start the app, fetch /sbom, stop the app
-sbom-runtime: $(BIN)
+## sbom: start the app, fetch /sbom into ./sbom/runtime.txt, stop the app
+sbom: $(BIN)
 	@mkdir -p $(SBOM_DIR)
 	@env -u DATABASE_URL PORT=$(PORT) $(BIN) >/dev/null 2>&1 & pid=$$!; \
 	trap 'kill $$pid 2>/dev/null; wait $$pid 2>/dev/null' EXIT; \
@@ -38,15 +25,9 @@ sbom-runtime: $(BIN)
 	done; \
 	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
 
-## sbom-diff: draw source and binary SBOMs as ASCII trees, then show the runtime one
-sbom-diff:
-	@for f in $(SRC_SBOM) $(BIN_SBOM) $(RUNTIME_SBOM); do \
-	  [ -f $$f ] || { echo "missing $$f: run 'make build sbom-runtime' first" >&2; exit 1; }; \
-	done
-	@jq -n -r -f sbom-diff.jq --slurpfile src $(SRC_SBOM) --slurpfile bin $(BIN_SBOM) \
-	  --arg srcfile $(SRC_SBOM) --arg binfile $(BIN_SBOM)
-	@echo "=== RUNTIME ($(RUNTIME_SBOM))"; echo "    made by: GET /sbom, the app reads its own build info"; echo
-	@cat $(RUNTIME_SBOM)
+## sbom-embedded: module list Go embedded in the binary
+sbom-embedded: $(BIN)
+	go version -m $(BIN)
 
 ## run: run the app (in-memory store unless DATABASE_URL is set)
 run:

@@ -1,7 +1,8 @@
-# guestbook: a Go app and its SBOMs
+# guestbook: a Go app that reports its own SBOM
 
-A tiny guestbook HTTP API, built to demonstrate three ways of producing a
-Software Bill of Materials (SBOM) using only Go's own tooling.
+A tiny guestbook HTTP API, built to demonstrate how a Go program can produce a
+Software Bill of Materials (SBOM) from the build information Go embeds in every
+binary.
 
 ## API
 
@@ -21,23 +22,17 @@ standard library's `http.ServeMux`.
 
 ## Prerequisites
 
-| Tool              | Install                                                                          |
-|-------------------|----------------------------------------------------------------------------------|
-| Go 1.25+          | <https://go.dev/dl/> (an older Go will auto-download the toolchain in `go.mod`)  |
-| cyclonedx-gomod   | `go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest` (or `brew install cyclonedx/cyclonedx/cyclonedx-gomod`) |
-| jq                | `sudo apt install jq` / `brew install jq`                                        |
-| make, curl, git   | usually preinstalled                                                             |
-
-`cyclonedx-gomod` installs into `$(go env GOPATH)/bin`; the Makefile finds it
-there even if that directory is not on your `PATH`. Its `app` mode needs this
-folder to be inside a git repository (it derives the main module's version from git).
+| Tool            | Install                                                                         |
+|-----------------|---------------------------------------------------------------------------------|
+| Go 1.25+        | <https://go.dev/dl/> (an older Go will auto-download the toolchain in `go.mod`) |
+| make, curl      | usually preinstalled                                                            |
 
 ## Build and run
 
 From this folder:
 
 ```
-make build                # compile to bin/guestbook and write the SBOMs to sbom/
+make build                # compile to bin/guestbook
 make run                  # go run, in-memory store, port 18080
 PORT=8080 make run        # pick a different port
 ./bin/guestbook           # run the built binary (port 8080 unless PORT is set)
@@ -61,56 +56,39 @@ curl localhost:18080/sbom
 
 ## Make targets
 
-| Target          | What it does                                                                  |
-|-----------------|-------------------------------------------------------------------------------|
-| `build`         | `go build` into `./bin/`, then writes both CycloneDX SBOMs into `./sbom/`     |
-| `sbom-embedded` | prints `go version -m ./bin/guestbook`                                        |
-| `sbom-runtime`  | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app        |
-| `sbom-diff`     | draws the source and binary SBOMs as ASCII trees, then prints the runtime one |
-| `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)                       |
-| `test`          | `go test ./...`                                                               |
-| `clean`         | removes `bin/` and `sbom/`                                                    |
+| Target          | What it does                                                          |
+|-----------------|-----------------------------------------------------------------------|
+| `build`         | `go build` into `./bin/`                                              |
+| `sbom`          | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app |
+| `sbom-embedded` | prints `go version -m ./bin/guestbook`                                |
+| `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)               |
+| `test`          | `go test ./...`                                                       |
+| `clean`         | removes `bin/` and `sbom/`                                            |
 
-## The SBOMs
+## The SBOM
 
-1. **Embedded, `go version -m ./bin/guestbook`.** Not CycloneDX: this is the
-   raw module list the Go linker stamped into the binary (`dep` lines with
-   `h1:` checksums, plus VCS and build settings). It is the source of truth the
-   next two are derived from.
-2. **Binary, `sbom/binary.cdx.json`**, from `cyclonedx-gomod bin`. It reads the
-   same embedded build info and reformats it as CycloneDX. Because build info
-   has no import graph, every module is recorded as a direct dependency of the
-   main module (a star, not a tree).
-3. **Source, `sbom/source.cdx.json`**, from `cyclonedx-gomod app`. It loads the
-   module with the Go toolchain, evaluates build constraints, and records the
-   `dependencies` graph: which module requires which.
-4. **Runtime, `sbom/runtime.txt`**, from `GET /sbom`. The app calls
-   `runtime/debug.ReadBuildInfo()` on itself and prints an ASCII tree of
-   package URLs (purls): the main module, each dependency module with its
-   version, and the Go toolchain (`pkg:golang/std@<version>`). It is plain
-   text, not CycloneDX, and carries no checksums. Like the binary SBOM, it has
-   no import graph, so everything hangs directly off the main module:
+`GET /sbom` calls `runtime/debug.ReadBuildInfo()` on the running binary and
+prints an ASCII tree of package URLs (purls): the main module, each dependency
+module with its version, and the Go toolchain (`pkg:golang/std@<version>`):
 
-   ```
-   pkg:golang/github.com/nisha/guestbook
-   +-- pkg:golang/github.com/jackc/pgx/v5@v5.11.0
-   +-- ...
-   `-- pkg:golang/std@1.26.10
-   ```
+```
+pkg:golang/github.com/nisha/guestbook
++-- pkg:golang/github.com/jackc/pgpassfile@v1.0.0
++-- pkg:golang/github.com/jackc/pgservicefile@v0.0.0-20240606120523-5a60cdf6a761
++-- pkg:golang/github.com/jackc/pgx/v5@v5.11.0
++-- pkg:golang/github.com/jackc/puddle/v2@v2.2.2
++-- pkg:golang/golang.org/x/sync@v0.17.0
++-- pkg:golang/golang.org/x/text@v0.29.0
+`-- pkg:golang/std@1.26.10
+```
 
-### Why they differ
+Things to know:
 
-- **Graph vs. star vs. nothing.** Build info records *which modules are in the
-  binary* but not *who pulled them in*. Only the source-based SBOM can see
-  `go.mod` and the package import graph, so only it shows e.g. `puddle` and
-  `x/text` each pulling in `x/sync`. The binary SBOM flattens everything under
-  the main module, and the runtime output is the same flat shape (plain text, so it has no
-  `dependencies` section at all). `make sbom-diff` draws them so you can see this.
-- **Toolchain.** The runtime SBOM lists the Go toolchain as a component;
-  `cyclonedx-gomod` only adds the standard library when passed `-std`.
-- **Version of the main module.** Build info and the tools derive it from VCS
-  stamps; it will be a pseudo-version such as `v0.0.0-<time>-<rev>`, with
-  `+dirty` if the tree has uncommitted changes.
-- **Provenance.** Source SBOMs describe what *would* be built; binary and
-  runtime SBOMs describe what *was* built. For attestation, prefer the latter
-  and keep the former for dependency analysis.
+- **Flat, not a real tree.** Build info records which modules are in the binary
+  but not which module imports which, so everything hangs directly off the main
+  module. (In reality `puddle` and `x/text` each pull in `x/sync`.)
+- **No main module version.** Build info reports `(devel)` for the main module,
+  so its purl has no `@version`.
+- **Same data as `go version -m`.** `make sbom-embedded` prints the raw module
+  list (with `h1:` checksums and build settings) that Go stamped into the
+  binary; `/sbom` is a reformatting of it.

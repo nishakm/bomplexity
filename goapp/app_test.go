@@ -70,7 +70,7 @@ func TestPostValidation(t *testing.T) {
 	}
 }
 
-func TestRenderSBOM(t *testing.T) {
+func TestFormatSBOM(t *testing.T) {
 	bi := &debug.BuildInfo{
 		GoVersion: "go1.25.1",
 		Main:      debug.Module{Path: "example.com/app", Version: "(devel)"},
@@ -83,12 +83,12 @@ func TestRenderSBOM(t *testing.T) {
 		"+-- pkg:golang/github.com/jackc/pgx/v5@v5.7.0\n" +
 		"+-- pkg:golang/golang.org/x/text@v0.20.0\n" +
 		"`-- pkg:golang/std@1.25.1\n"
-	if got := renderSBOM(bi); got != want {
+	if got := formatSBOM(bi); got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
-func TestRenderSBOMReplace(t *testing.T) {
+func TestFormatSBOMReplace(t *testing.T) {
 	bi := &debug.BuildInfo{
 		GoVersion: "go1.25.1",
 		Main:      debug.Module{Path: "example.com/app", Version: "v1.2.3"},
@@ -97,7 +97,7 @@ func TestRenderSBOMReplace(t *testing.T) {
 			Replace: &debug.Module{Path: "example.com/fork", Version: "v1.0.1"},
 		}},
 	}
-	got := renderSBOM(bi)
+	got := formatSBOM(bi)
 	if !strings.HasPrefix(got, "pkg:golang/example.com/app@v1.2.3\n") ||
 		!strings.Contains(got, "+-- pkg:golang/example.com/lib@v1.0.1\n") {
 		t.Fatalf("unexpected output:\n%s", got)

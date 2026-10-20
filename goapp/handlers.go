@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"runtime/debug"
 	"strings"
 )
 
@@ -60,13 +59,13 @@ func newMux(store Store) *http.ServeMux {
 		writeJSON(w, http.StatusCreated, e)
 	})
 	mux.HandleFunc("GET /sbom", func(w http.ResponseWriter, _ *http.Request) {
-		bi, ok := debug.ReadBuildInfo()
-		if !ok {
-			writeError(w, http.StatusInternalServerError, "build info unavailable (binary not built with module support)")
+		out, err := renderSBOM()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(renderSBOM(bi)))
+		_, _ = w.Write([]byte(out))
 	})
 	return mux
 }
