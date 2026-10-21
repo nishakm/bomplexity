@@ -2,8 +2,12 @@ BIN          := bin/guestbook
 SBOM_DIR     := sbom
 RUNTIME_SBOM := $(SBOM_DIR)/runtime.txt
 PORT         ?= 18080
+IMAGE        ?= guestbook
+TAG          ?= dev
+PLATFORM     ?= linux/$(shell go env GOARCH)
+IMAGE_SBOM   := $(SBOM_DIR)/image.spdx.json
 
-.PHONY: build sbom run test clean
+.PHONY: build sbom image image-base-sboms run test clean
 
 ## build: compile to ./bin
 build:
@@ -24,6 +28,29 @@ sbom: $(BIN)
 	  sleep 0.1; \
 	done; \
 	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
+
+## image: build the container image and write its SBOM to ./sbom/image.spdx.json
+image:
+	@mkdir -p $(SBOM_DIR)
+	@rm -rf $(SBOM_DIR)/.image-export
+	docker buildx build --sbom=true --provenance=false -t $(IMAGE):$(TAG) \
+	  --output type=docker --output type=local,dest=$(SBOM_DIR)/.image-export .
+	@# BuildKit wraps the SPDX document in an in-toto statement; keep the document.
+	@jq '.predicate' $(SBOM_DIR)/.image-export/sbom.spdx.json > $(IMAGE_SBOM)
+	@rm -rf $(SBOM_DIR)/.image-export
+	@jq -r '"wrote $(IMAGE_SBOM): \(.spdxVersion), \(.packages | length) packages"' $(IMAGE_SBOM)
+
+## image-base-sboms: fetch the SBOMs published for each FROM image in the Dockerfile
+image-base-sboms:
+	@mkdir -p $(SBOM_DIR)
+	@for img in $$(awk 'toupper($$1)=="FROM" {print $$2}' Dockerfile | sort -u); do \
+	  out=$(SBOM_DIR)/base-$$(echo $${img%%@*} | tr '/:' '__').spdx.json; \
+	  docker buildx imagetools inspect $$img --format '{{json .SBOM}}' \
+	    | jq '.["$(PLATFORM)"].SPDX' > $$out; \
+	  jq -e . $$out >/dev/null && [ "$$(jq 'type' $$out)" = '"object"' ] \
+	    || { echo "no SBOM published for $$img ($(PLATFORM))" >&2; rm -f $$out; exit 1; }; \
+	  jq -r --arg img "$${img%%@*}" --arg f "$$out" '"wrote \($$f): \($$img), \(.spdxVersion), \(.packages | length) packages"' $$out; \
+	done
 
 ## run: run the app (in-memory store unless DATABASE_URL is set)
 run:

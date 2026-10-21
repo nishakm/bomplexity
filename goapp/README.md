@@ -26,6 +26,8 @@ standard library's `http.ServeMux`.
 |-----------------|---------------------------------------------------------------------------------|
 | Go 1.25+        | <https://go.dev/dl/> (an older Go will auto-download the toolchain in `go.mod`) |
 | make, curl      | usually preinstalled                                                            |
+| Docker + buildx | only for the container image (`make image`); needs the containerd image store, the default in recent Docker |
+| jq              | only for the container image targets: `sudo apt install jq` / `brew install jq` |
 
 ## Build and run
 
@@ -60,9 +62,42 @@ curl localhost:18080/sbom
 |-----------------|-----------------------------------------------------------------------|
 | `build`         | `go build` into `./bin/`                                              |
 | `sbom`          | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app |
+| `image`         | builds the container image and writes its SBOM to `sbom/image.spdx.json` |
+| `image-base-sboms` | fetches the SBOMs published for the `FROM` images into `sbom/base-*.spdx.json` |
 | `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)               |
 | `test`          | `go test ./...`                                                       |
 | `clean`         | removes `bin/` and `sbom/`                                            |
+
+## Container image
+
+The `Dockerfile` is a multi-stage build: the first stage compiles a static
+binary (`CGO_ENABLED=0`) on `golang`, and the release stage copies only that
+binary onto `alpine`, running as a non-root user (uid 10001). Both base images
+are pinned by digest, and both are Docker Official Images that publish an SPDX
+SBOM attestation, so you can inspect what you are building on.
+
+```
+make image                # build guestbook:dev and write sbom/image.spdx.json
+make image-base-sboms     # write sbom/base-golang_*.spdx.json and sbom/base-alpine_*.spdx.json
+docker run --rm -p 8080:8080 guestbook:dev
+```
+
+Override the name or tag with `IMAGE=... TAG=...`.
+
+- **Image SBOM.** `make image` builds with `--sbom=true`, so BuildKit scans the
+  final image (BuildKit's scanner is Syft-based) and the make target saves the
+  SPDX 2.3 document. It lists the Alpine packages (`musl`, `busybox`, ...) and
+  the Go modules and standard library found in the binary (pgx, `stdlib`).
+  Only the release stage is scanned: the `golang` build stage and its
+  toolchain are not in the image, so they are not in its SBOM.
+- **Base image SBOMs.** `make image-base-sboms` reads the attestations from the
+  registry (`docker buildx imagetools inspect <image> --format '{{json .SBOM}}'`).
+  It fails if a `FROM` image has none. Not every minimal image publishes one:
+  `scratch` has none, and `gcr.io/distroless/static` and
+  `cgr.dev/chainguard/static` returned no SBOM through this mechanism when I
+  checked, which is why the release stage is Alpine.
+- **Updating bases.** To move to newer base images, change the tags and
+  re-resolve the digests with `docker buildx imagetools inspect <image>`.
 
 ## The SBOM
 
