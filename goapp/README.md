@@ -99,7 +99,65 @@ Override the name or tag with `IMAGE=... TAG=...`.
 - **Updating bases.** To move to newer base images, change the tags and
   re-resolve the digests with `docker buildx imagetools inspect <image>`.
 
-## The SBOM
+### Testing the image
+
+Run it (the app listens on 8080 inside the container; use `-p 9000:8080` if
+8080 is taken on your machine):
+
+```
+docker run --rm -d -p 8080:8080 --name guestbook guestbook:dev
+```
+
+Hit the endpoints. The `/sbom` output should match the module list from
+`make sbom`:
+
+```
+curl localhost:8080/healthz
+curl -XPOST localhost:8080/entries -d '{"name":"ann","message":"hi"}'
+curl localhost:8080/entries
+curl localhost:8080/sbom
+```
+
+Check the image properties:
+
+```
+docker exec guestbook id                      # uid=10001(guestbook), not root
+docker logs guestbook                         # "DATABASE_URL not set: using in-memory store"
+docker images guestbook:dev                   # ~35 MB
+docker inspect guestbook:dev --format '{{.Config.User}} {{.Config.Entrypoint}}'
+```
+
+Stop it (`--rm` removes the container when it stops):
+
+```
+docker stop guestbook
+```
+
+To test against Postgres, put both containers on a network. Give Postgres a few
+seconds to start before the second command: the app exits at startup if it
+cannot reach the database.
+
+```
+docker network create gbnet
+docker run -d --rm --name pg --network gbnet -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=gb postgres:17
+docker run --rm -d --name guestbook --network gbnet -p 8080:8080 \
+  -e DATABASE_URL=postgres://postgres:pw@pg:5432/gb guestbook:dev
+```
+
+`docker logs guestbook` should say "using Postgres store". After posting an
+entry, confirm it reached the database:
+
+```
+docker exec pg psql -U postgres -d gb -c 'select * from entries'
+```
+
+Clean up:
+
+```
+docker stop guestbook pg && docker network rm gbnet
+```
+
+## The App SBOM
 
 `GET /sbom` calls `runtime/debug.ReadBuildInfo()` on the running binary and
 prints an ASCII tree of package URLs (purls): the main module, each dependency
