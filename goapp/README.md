@@ -61,7 +61,7 @@ curl localhost:18080/sbom
 | Target          | What it does                                                          |
 |-----------------|-----------------------------------------------------------------------|
 | `build`         | `go build` into `./bin/`                                              |
-| `sbom`          | starts the app, fetches `/sbom` into `sbom/runtime.txt`, stops the app |
+| `sbom`          | starts the app, fetches `/sbom`, writes its purls (one per line) to `sbom/runtime.txt`, stops the app |
 | `image`         | builds the container image and writes its SBOM to `sbom/image.spdx.json` |
 | `image-base-sboms` | fetches the SBOMs published for the `FROM` images into `sbom/base-*.spdx.json` |
 | `run`           | runs the app (`PORT` defaults to 18080 in the Makefile)               |
@@ -173,6 +173,11 @@ pkg:golang/github.com/nisha/guestbook
 +-- pkg:golang/golang.org/x/text@v0.29.0
 `-- pkg:golang/std@1.26.10
 ```
+
+`make sbom` saves this as a plain list of purls in `sbom/runtime.txt`: it drops
+the first line (the main module) and the `+-- ` / `` `-- `` prefix from each
+remaining line. That file can be scanned directly, for example with
+`grype purl:sbom/runtime.txt`.
 
 Things to know:
 

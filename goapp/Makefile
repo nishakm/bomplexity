@@ -17,7 +17,7 @@ build:
 $(BIN):
 	$(MAKE) build
 
-## sbom: start the app, fetch /sbom into ./sbom/runtime.txt, stop the app
+## sbom: start the app, fetch /sbom, write its purls (one per line) to ./sbom/runtime.txt, stop the app
 sbom: $(BIN)
 	@mkdir -p $(SBOM_DIR)
 	@env -u DATABASE_URL PORT=$(PORT) $(BIN) >/dev/null 2>&1 & pid=$$!; \
@@ -27,7 +27,12 @@ sbom: $(BIN)
 	  kill -0 $$pid 2>/dev/null || { echo "app exited early (is port $(PORT) in use?)" >&2; exit 1; }; \
 	  sleep 0.1; \
 	done; \
-	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"
+	curl -fsS http://localhost:$(PORT)/sbom -o $(RUNTIME_SBOM).tmp; \
+	status=$$?; \
+	if [ $$status -eq 0 ]; then \
+	  tail -n +2 $(RUNTIME_SBOM).tmp | cut -c5- > $(RUNTIME_SBOM) && echo "wrote $(RUNTIME_SBOM)"; \
+	fi; \
+	rm -f $(RUNTIME_SBOM).tmp; exit $$status
 
 ## image: build the container image and write its SBOM to ./sbom/image.spdx.json
 image:
