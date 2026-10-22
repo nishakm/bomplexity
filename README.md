@@ -16,3 +16,8 @@ Demos around Software Bills of Materials (SBOMs).
 
 2. What happens when we containerize?
   - The typical containerization method is to use Docker. We write a multistage Dockerfile for this. However, note that once an image gets built, the number of components immediately bloats up.
+
+3. OK, but this isn't useful unless it's deployed with all the fixings
+  - Here we create a Kubernetes deployment with the cluster config, app, already available postgres and nginx container images from DockerHub.
+  - Now we have 3 container images that actually make up our application. We have 3 SBOMs, each having their own set of components.
+  - Here's where the payback happens - what if there is a 0 day vulnerability and you need to find all the applications or services that are affected? You can deploy something to the cluster to look for vulnerabilities, OR, you can take a look at the SBOMs that are not on the cluster but put away somewhere else to take a look at.
