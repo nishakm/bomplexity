@@ -2,3 +2,4 @@ goapp/bin/
 goapp/sbom/
 .env
 kind/sbom/
+agent/sbom/

@@ -1,0 +1,10 @@
+# Keep secrets and build clutter out of the image build context.
+.env
+.env.example
+sbom/
+Dockerfile*
+.dockerignore
+*.md
+*.yaml
+Makefile
+*.sh

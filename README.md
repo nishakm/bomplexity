@@ -5,6 +5,9 @@ Demos around Software Bills of Materials (SBOMs).
 | Folder   | Contents                                                              |
 |----------|-----------------------------------------------------------------------|
 | `goapp/` | Go guestbook API plus tooling that generates its CycloneDX SBOMs. See `goapp/README.md`. |
+| `kind/`  | Demo cluster: Postgres, the app and nginx. See `kind/README.md`. |
+| `agent/` | "Ask the guestbook" agent and MCP server added to the cluster. See `agent/README.md`. |
+| `docs/`  | `act3-demo.md`: the Act 3 demo commands, in order. |
 
 ## Talk Outline
 

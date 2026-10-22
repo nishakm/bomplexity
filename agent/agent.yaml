@@ -1,0 +1,140 @@
+# Everything the agent adds to the demo cluster. Apply with `make agent-up`.
+# The llm-credentials Secret is created by the Makefile from .env, never here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-prompt
+data:
+  system-prompt.txt: |
+    You are the guestbook host for BSidesPDX. Answer questions about the guestbook entries using your tools. Be brief and friendly.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guestbook-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guestbook-mcp
+  template:
+    metadata:
+      labels:
+        app: guestbook-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: guestbook-mcp
+          image: guestbook-mcp:v1
+          imagePullPolicy: IfNotPresent   # use the image loaded into kind
+          ports:
+            - containerPort: 8081
+          env:
+            - name: ENTRIES_URL
+              value: http://guestbook/entries   # read-only: the tools only GET
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guestbook-mcp
+spec:
+  selector:
+    app: guestbook-mcp
+  ports:
+    - port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guestbook-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guestbook-agent
+  template:
+    metadata:
+      labels:
+        app: guestbook-agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: guestbook-agent
+          image: guestbook-agent:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: MCP_SERVER_URL
+              value: http://guestbook-mcp:8081/mcp
+            - name: LLM_MODEL
+              value: gemini-3.5-flash-lite
+            - name: SYSTEM_PROMPT_FILE
+              value: /etc/agent/system-prompt.txt
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: LLM_API_KEY
+          volumeMounts:
+            - name: prompt
+              mountPath: /etc/agent
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+      volumes:
+        - name: prompt
+          configMap:
+            name: agent-prompt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guestbook-agent
+spec:
+  selector:
+    app: guestbook-agent
+  ports:
+    - port: 80
+      targetPort: 8082
+---
+# Replaces nginx-config from ../kind/nginx.yaml: same proxy plus /ask routed to
+# the agent. `make agent-down` restores the original.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location = /ask {
+        proxy_pass http://guestbook-agent:80;
+        proxy_set_header Host $host;
+        proxy_read_timeout 120s;
+      }
+      location / {
+        proxy_pass http://guestbook:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+      }
+    }
