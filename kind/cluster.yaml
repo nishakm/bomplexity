@@ -1,0 +1,10 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: sbom-demo
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Port 30080 inside the cluster becomes localhost:8080 on your laptop.
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
