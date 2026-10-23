@@ -48,4 +48,4 @@ make test           # go vet + unit tests
 | `SYSTEM_PROMPT_FILE` | none (mounted from the `agent-prompt` ConfigMap)          |
 | `MCP_SERVER_URL`     | `http://guestbook-mcp:8081/mcp`                           |
 
-The demo script is in `../docs/act3-demo.md`.
+The demo commands are in the "Agent demo commands" section of the root `../README.md`.
